@@ -1,34 +1,23 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
+import readline from 'readline';
 
-// Comprehensive path and permission validation
 function validatePath(filePath: string, mode: 'read' | 'write') {
   try {
-    // Ensure directory exists
     const dir = path.dirname(filePath);
     fs.mkdirSync(dir, { recursive: true });
 
-    // Check file/directory existence
     if (!fs.existsSync(dir)) {
       throw new Error(`Directory does not exist: ${dir}`);
     }
 
-    // Attempt to set permissions
-    try {
-      fs.chmodSync(dir, 0o777);
-    } catch (permErr) {
-      console.warn(`[PERMISSION] Could not set permissions for ${dir}:`, permErr);
-    }
-
-    // Validate write access by attempting to create a temp file
     if (mode === 'write') {
       const tempFile = path.join(dir, `temp-${Date.now()}.txt`);
       fs.writeFileSync(tempFile, 'test');
       fs.unlinkSync(tempFile);
     }
 
-    console.log(`[PATH VALIDATION] ${filePath} - ${mode} access verified`);
     return true;
   } catch (err) {
     console.error(`[PATH ERROR] Validation failed for ${filePath}:`, err);
@@ -36,10 +25,8 @@ function validatePath(filePath: string, mode: 'read' | 'write') {
   }
 }
 
-// Direct FFmpeg command execution with detailed error handling
-function generateWaveform(inputPath: string, outputPath: string) {
+function generateWaveform(inputPath: string, outputPath: string, resolution: string, colors: string) {
   return new Promise<void>((resolve, reject) => {
-    // Validate input and output paths
     try {
       validatePath(inputPath, 'read');
       validatePath(outputPath, 'write');
@@ -47,31 +34,19 @@ function generateWaveform(inputPath: string, outputPath: string) {
       return reject(pathErr);
     }
 
-    // Construct FFmpeg command manually
     const ffmpegArgs = [
       '-i', inputPath,
-      '-y',  // Overwrite output files
-      '-filter_complex', 'showwavespic=size=1920x1080:colors=blue',
+      '-y',
+      '-filter_complex', `showwavespic=size=${resolution}:colors=${colors}`,
       outputPath
     ];
 
     console.log('[FFMPEG] Command:', 'ffmpeg', ffmpegArgs.join(' '));
 
-    // Spawn FFmpeg process directly
     const ffmpegProcess = spawn('ffmpeg', ffmpegArgs, { 
       stdio: ['ignore', 'pipe', 'pipe'] 
     });
 
-    // Capture stdout and stderr
-    ffmpegProcess.stdout.on('data', (data) => {
-      console.log('[FFMPEG STDOUT]:', data.toString());
-    });
-
-    ffmpegProcess.stderr.on('data', (data) => {
-      console.error('[FFMPEG STDERR]:', data.toString());
-    });
-
-    // Handle process completion
     ffmpegProcess.on('close', (code) => {
       if (code === 0) {
         console.log('[WAVEFORM] Generation completed successfully');
@@ -83,7 +58,6 @@ function generateWaveform(inputPath: string, outputPath: string) {
       }
     });
 
-    // Handle process errors
     ffmpegProcess.on('error', (err) => {
       console.error('[PROCESS ERROR]:', err);
       reject(err);
@@ -91,16 +65,46 @@ function generateWaveform(inputPath: string, outputPath: string) {
   });
 }
 
-// Main execution function
 async function main() {
-  try {
-    // Resolve absolute paths
-    const inputAudio = path.resolve(__dirname, '../audio/input.mp3');
-    const outputDir = path.resolve(__dirname, '../output');
-    const outputImage = path.join(outputDir, 'waveform.png');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
 
-    // Generate waveform
-    await generateWaveform(inputAudio, outputImage);
+  let inputAudio = '';
+  let outputImage = '';
+  let resolution = '1920x1080';
+  let colors = 'blue';
+
+  await new Promise<void>((resolve) => {
+    rl.question('Enter input audio path: ', (answer) => {
+      inputAudio = answer;
+      rl.question('Enter output image path: ', (answer) => {
+        outputImage = answer;
+        rl.question('Enter resolution (default: 1920x1080): ', (answer) => {
+          if (answer) resolution = answer;
+          rl.question('Enter colors (default: blue): ', (answer) => {
+            if (answer) colors = answer;
+            rl.close();
+            resolve();
+          });
+        });
+      });
+    });
+  });
+
+  if (!inputAudio || !outputImage) {
+    console.error('Usage: node script.js <input_audio> <output_image> [resolution] [colors]');
+    process.exit(1);
+  }
+
+  try {
+    await generateWaveform(
+      path.resolve(inputAudio), 
+      path.resolve(outputImage), 
+      resolution, 
+      colors
+    );
 
     console.log(`[SUCCESS] Waveform generated at: ${outputImage}`);
   } catch (error) {
@@ -109,5 +113,4 @@ async function main() {
   }
 }
 
-// Execute the main function
 main();
