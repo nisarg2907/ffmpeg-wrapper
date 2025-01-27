@@ -8,5 +8,7 @@
     "esModuleInterop": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules"],
+  "main": "src/test.ts",
+  "outFile": "dist/test.js"
 }
